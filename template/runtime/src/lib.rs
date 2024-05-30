@@ -22,7 +22,7 @@ use sp_runtime::{
 	create_runtime_str, generic, impl_opaque_keys,
 	traits::{
 		BlakeTwo256, Block as BlockT, DispatchInfoOf, Dispatchable, Get, IdentifyAccount,
-		IdentityLookup, NumberFor, One, PostDispatchInfoOf, UniqueSaturatedInto, Verify,
+		IdentityLookup, NumberFor, One, PostDispatchInfoOf,OpaqueKeys, UniqueSaturatedInto, Verify,
 	},
 	transaction_validity::{TransactionSource, TransactionValidity, TransactionValidityError},
 	ApplyExtrinsicResult, ConsensusEngineId, ExtrinsicInclusionMode, Perbill, Permill,
@@ -38,7 +38,7 @@ use frame_support::{
 	derive_impl,
 	genesis_builder_helper::{build_config, create_default_config},
 	parameter_types,
-	traits::{ConstBool, ConstU32, ConstU8, FindAuthor, OnFinalize, OnTimestampSet},
+	traits::{ConstBool, ConstU32, ConstU8, FindAuthor, OnFinalize, KeyOwnerProofSystem, OnTimestampSet},
 	weights::{constants::WEIGHT_REF_TIME_PER_MILLIS, IdentityFee, Weight},
 };
 use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter};
@@ -50,16 +50,20 @@ use pallet_ethereum::{
 	Call::transact, PostLogContent, Transaction as EthereumTransaction, TransactionAction,
 	TransactionData,
 };
+use pallet_session::historical as session_historical;
+
 use pallet_evm::{
 	Account as EVMAccount, EnsureAccountId20, FeeCalculator, IdentityAddressMapping, Runner,
 };
 
 // A few exports that help ease life for downstream crates.
 pub use frame_system::Call as SystemCall;
+use frame_system::{EnsureRoot, EnsureSigned};
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::Multiplier;
 
+mod validator_manager;
 mod precompiles;
 use precompiles::FrontierPrecompiles;
 
@@ -112,6 +116,7 @@ pub mod opaque {
 		pub struct SessionKeys {
 			pub aura: Aura,
 			pub grandpa: Grandpa,
+			pub babe: Babe,
 		}
 	}
 }
@@ -132,10 +137,22 @@ pub const MILLISECS_PER_BLOCK: u64 = 6000;
 
 pub const SLOT_DURATION: u64 = MILLISECS_PER_BLOCK;
 
+// pub EpochDurationInBlocks: BlockNumber = 1 * HOURS;
+
 // Time is measured by number of blocks.
 pub const MINUTES: BlockNumber = 60_000 / (MILLISECS_PER_BLOCK as BlockNumber);
 pub const HOURS: BlockNumber = MINUTES * 60;
 pub const DAYS: BlockNumber = HOURS * 24;
+// pub const EpochDurationInBlocks: BlockNumber = 1 * HOURS;
+pub const PRIMARY_PROBABILITY: (u64, u64) = (1, 4);
+
+/// The BABE epoch configuration at genesis.
+pub const BABE_GENESIS_EPOCH_CONFIG: sp_consensus_babe::BabeEpochConfiguration =
+	sp_consensus_babe::BabeEpochConfiguration {
+		c: PRIMARY_PROBABILITY,
+		allowed_slots: sp_consensus_babe::AllowedSlots::PrimaryAndSecondaryVRFSlots,
+	};
+
 
 /// The version information used to identify this runtime when compiled natively.
 #[cfg(feature = "std")]
@@ -406,6 +423,87 @@ impl pallet_hotfix_sufficients::Config for Runtime {
 	type WeightInfo = pallet_hotfix_sufficients::weights::SubstrateWeight<Self>;
 }
 
+pub const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10 * MINUTES;
+pub const EPOCH_DURATION_IN_SLOTS: u64 = {
+	const SLOT_FILL_RATE: f64 = 3000 as f64 / 3000 as f64;
+
+	(EPOCH_DURATION_IN_BLOCKS as f64 * SLOT_FILL_RATE) as u64
+};
+
+parameter_types! {
+	// NOTE: Currently it is not possible to change the epoch duration after the chain has started.
+	//       Attempting to do so will brick block production.
+	pub const EpochDuration: u64 = EPOCH_DURATION_IN_SLOTS;
+	pub const ExpectedBlockTime: u64 = 3000;
+	pub const ReportLongevity: u64 = 24 * 28 * 6 * EpochDuration::get();
+		// BondingDuration::get() as u64 * SessionsPerEra::get() as u64 * EpochDuration::get();
+	// pub const MaxAuthorities: u32 = 100;
+	pub const MaxNominators: u32 = 100;
+}
+
+impl pallet_babe::Config for Runtime {
+	type EpochDuration = EpochDuration;
+	type ExpectedBlockTime = ExpectedBlockTime;
+	type EpochChangeTrigger = pallet_babe::ExternalTrigger;
+	type DisabledValidators = Session;
+	type WeightInfo = ();
+	type MaxAuthorities = MaxAuthorities;
+	type MaxNominators = MaxNominators;
+	type KeyOwnerProof = sp_session::MembershipProof;
+	type EquivocationReportSystem = pallet_babe::EquivocationReportSystem<Self, Offences, Historical, ReportLongevity>;
+}
+
+impl pallet_offences::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type IdentificationTuple = pallet_session::historical::IdentificationTuple<Self>;
+	type OnOffenceHandler = ();
+}
+
+impl pallet_authorship::Config for Runtime {
+	type FindAuthor = pallet_session::FindAccountFromAuthorIndex<Self, Babe>;
+	type EventHandler = ();
+}
+
+pub struct ValidatorIdOf;
+impl sp_runtime::traits::Convert<AccountId, Option<AccountId>> for ValidatorIdOf {
+	fn convert(a: AccountId) -> Option<AccountId> {
+		Some(a)
+	}
+}
+
+
+impl pallet_session::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type ValidatorId = AccountId;
+	type ValidatorIdOf = ValidatorIdOf;
+	type ShouldEndSession = Babe;
+	type NextSessionRotation = Babe;
+	type SessionManager = pallet_session::historical::NoteHistoricalRoot<Self, ValidatorManager>;
+	type SessionHandler = <opaque::SessionKeys as OpaqueKeys>::KeyTypeIdProviders;
+	type Keys = opaque::SessionKeys;
+	type WeightInfo = pallet_session::weights::SubstrateWeight<Runtime>;
+}
+
+pub struct FullIdentificationOf;
+impl sp_runtime::traits::Convert<AccountId, Option<()>> for FullIdentificationOf {
+	fn convert(_: AccountId) -> Option<()> {
+		Some(Default::default())
+	}
+}
+
+impl pallet_session::historical::Config for Runtime {
+	type FullIdentification = ();
+	type FullIdentificationOf = FullIdentificationOf;
+}
+
+impl validator_manager::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type PrivilegedOrigin = EnsureRoot<AccountId>;
+}
+
+
+
+
 #[frame_support::pallet]
 pub mod pallet_manual_seal {
 	use super::*;
@@ -451,8 +549,13 @@ frame_support::construct_runtime!(
 		DynamicFee: pallet_dynamic_fee,
 		BaseFee: pallet_base_fee,
 		HotfixSufficients: pallet_hotfix_sufficients,
-
+		Babe: pallet_babe,
 		ManualSeal: pallet_manual_seal,
+		Offences: pallet_offences,
+		Historical: session_historical,
+		Session: pallet_session,
+		ValidatorManager: validator_manager,
+		Authorship: pallet_authorship
 	}
 );
 
@@ -479,6 +582,14 @@ impl fp_rpc::ConvertTransaction<opaque::UncheckedExtrinsic> for TransactionConve
 		opaque::UncheckedExtrinsic::decode(&mut &encoded[..])
 			.expect("Encoded extrinsic is always valid")
 	}
+}
+
+impl<C> frame_system::offchain::SendTransactionTypes<C> for Runtime
+where
+	RuntimeCall: From<C>,
+{
+	type Extrinsic = UncheckedExtrinsic;
+	type OverarchingCall = RuntimeCall;
 }
 
 /// The address format for describing accounts.
@@ -718,6 +829,55 @@ impl_runtime_apis! {
 			// defined our key owner proof type as a bottom type (i.e. a type
 			// with no values).
 			None
+		}
+	}
+
+	impl sp_consensus_babe::BabeApi<Block> for Runtime {
+		fn configuration() -> sp_consensus_babe::BabeConfiguration {
+			let epoch_config = Babe::epoch_config().unwrap_or(BABE_GENESIS_EPOCH_CONFIG);
+			sp_consensus_babe::BabeConfiguration {
+				slot_duration: Babe::slot_duration(),
+				epoch_length: EPOCH_DURATION_IN_SLOTS,
+				c: epoch_config.c,
+				authorities: Babe::authorities().to_vec(),
+				randomness: Babe::randomness(),
+				allowed_slots: epoch_config.allowed_slots,
+			}
+		}
+
+		fn current_epoch_start() -> sp_consensus_babe::Slot {
+			Babe::current_epoch_start()
+		}
+
+		fn current_epoch() -> sp_consensus_babe::Epoch {
+			Babe::current_epoch()
+		}
+
+		fn next_epoch() -> sp_consensus_babe::Epoch {
+			Babe::next_epoch()
+		}
+
+		fn generate_key_ownership_proof(
+			_slot: sp_consensus_babe::Slot,
+			authority_id: sp_consensus_babe::AuthorityId,
+		) -> Option<sp_consensus_babe::OpaqueKeyOwnershipProof> {
+			use scale_codec::Encode;
+
+			Historical::prove((sp_consensus_babe::KEY_TYPE, authority_id))
+				.map(|p| p.encode())
+				.map(sp_consensus_babe::OpaqueKeyOwnershipProof::new)
+		}
+
+		fn submit_report_equivocation_unsigned_extrinsic(
+			equivocation_proof: sp_consensus_babe::EquivocationProof<<Block as BlockT>::Header>,
+			key_owner_proof: sp_consensus_babe::OpaqueKeyOwnershipProof,
+		) -> Option<()> {
+			let key_owner_proof = key_owner_proof.decode()?;
+
+			Babe::submit_unsigned_equivocation_report(
+				equivocation_proof,
+				key_owner_proof,
+			)
 		}
 	}
 

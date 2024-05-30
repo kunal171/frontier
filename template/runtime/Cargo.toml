@@ -19,6 +19,7 @@ scale-info = { workspace = true }
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
 sp-consensus-aura = { workspace = true }
+sp-consensus-babe = { workspace = true }
 sp-consensus-grandpa = { workspace = true }
 sp-core = { workspace = true }
 sp-genesis-builder = { workspace = true }
@@ -36,9 +37,13 @@ frame-support = { workspace = true }
 frame-system = { workspace = true }
 frame-system-benchmarking = { workspace = true, optional = true }
 frame-system-rpc-runtime-api = { workspace = true }
+pallet-authorship= { workspace = true }
 pallet-aura = { workspace = true }
+pallet-babe = { workspace = true }
 pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
 pallet-grandpa = { workspace = true }
+pallet-offences = { workspace = true }
+pallet-session = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
@@ -75,6 +80,7 @@ std = [
 	"sp-block-builder/std",
 	"sp-consensus-aura/std",
 	"sp-consensus-grandpa/std",
+	"sp-consensus-babe/std",
 	"sp-core/std",
 	"sp-genesis-builder/std",
 	"sp-inherents/std",
@@ -92,9 +98,13 @@ std = [
 	"frame-system/std",
 	"frame-system-rpc-runtime-api/std",
 	"frame-system-benchmarking?/std",
+	"pallet-authorship/std",
 	"pallet-aura/std",
+	"pallet-babe/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
+	"pallet-offences/std",
+	"pallet-session/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment/std",
@@ -121,6 +131,7 @@ runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"pallet-balances/runtime-benchmarks",
 	"pallet-grandpa/runtime-benchmarks",
+	"pallet-babe/runtime-benchmarks",
 	"pallet-timestamp/runtime-benchmarks",
 	"pallet-sudo/runtime-benchmarks",
 	"pallet-ethereum/runtime-benchmarks",
