@@ -12,10 +12,9 @@ include!(concat!(env!("OUT_DIR"), "/wasm_binary.rs"));
 
 use scale_codec::{Decode, Encode};
 use sp_api::impl_runtime_apis;
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
 use sp_consensus_grandpa::{AuthorityId as GrandpaId, AuthorityList as GrandpaAuthorityList};
 use sp_core::{
-	crypto::{ByteArray, KeyTypeId},
+	crypto::KeyTypeId,
 	OpaqueMetadata, H160, H256, U256,
 };
 use sp_runtime::{
@@ -38,7 +37,7 @@ use frame_support::{
 	derive_impl,
 	genesis_builder_helper::{build_config, create_default_config},
 	parameter_types,
-	traits::{ConstBool, ConstU32, ConstU8, FindAuthor, OnFinalize, KeyOwnerProofSystem, OnTimestampSet},
+	traits::{ ConstU32, ConstU8, FindAuthor, OnFinalize, KeyOwnerProofSystem},
 	weights::{constants::WEIGHT_REF_TIME_PER_MILLIS, IdentityFee, Weight},
 };
 use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter};
@@ -58,7 +57,7 @@ use pallet_evm::{
 
 // A few exports that help ease life for downstream crates.
 pub use frame_system::Call as SystemCall;
-use frame_system::{EnsureRoot, EnsureSigned};
+use frame_system::EnsureRoot;
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
 use pallet_transaction_payment::Multiplier;
@@ -114,7 +113,6 @@ pub mod opaque {
 
 	impl_opaque_keys! {
 		pub struct SessionKeys {
-			pub aura: Aura,
 			pub grandpa: Grandpa,
 			pub babe: Babe,
 		}
@@ -240,13 +238,6 @@ parameter_types! {
 	pub const MaxAuthorities: u32 = 100;
 }
 
-impl pallet_aura::Config for Runtime {
-	type AuthorityId = AuraId;
-	type MaxAuthorities = MaxAuthorities;
-	type DisabledValidators = ();
-	type AllowMultipleBlocksPerSlot = ConstBool<false>;
-}
-
 impl pallet_grandpa::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
@@ -262,20 +253,10 @@ parameter_types! {
 	pub storage EnableManualSeal: bool = false;
 }
 
-pub struct ConsensusOnTimestampSet<T>(PhantomData<T>);
-impl<T: pallet_aura::Config> OnTimestampSet<T::Moment> for ConsensusOnTimestampSet<T> {
-	fn on_timestamp_set(moment: T::Moment) {
-		if EnableManualSeal::get() {
-			return;
-		}
-		<pallet_aura::Pallet<T> as OnTimestampSet<T::Moment>>::on_timestamp_set(moment)
-	}
-}
-
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
-	type OnTimestampSet = ConsensusOnTimestampSet<Self>;
+	type OnTimestampSet = Babe;
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = ();
 }
@@ -332,8 +313,8 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorTruncated<F> {
 		I: 'a + IntoIterator<Item = (ConsensusEngineId, &'a [u8])>,
 	{
 		if let Some(author_index) = F::find_author(digests) {
-			let authority_id = Aura::authorities()[author_index as usize].clone();
-			return Some(H160::from_slice(&authority_id.to_raw_vec()[4..24]));
+			let authority_id = Babe::authorities()[author_index as usize].clone();
+			return Some(H160::from_slice(&authority_id.encode()[4..24]));
 		}
 		None
 	}
@@ -349,6 +330,7 @@ parameter_types! {
 	pub WeightPerGas: Weight = Weight::from_parts(weight_per_gas(BLOCK_GAS_LIMIT, NORMAL_DISPATCH_RATIO, WEIGHT_MILLISECS_PER_BLOCK), 0);
 	pub SuicideQuickClearLimit: u32 = 0;
 }
+
 
 impl pallet_evm::Config for Runtime {
 	type FeeCalculator = BaseFee;
@@ -367,7 +349,7 @@ impl pallet_evm::Config for Runtime {
 	type Runner = pallet_evm::runner::stack::Runner<Self>;
 	type OnChargeTransaction = ();
 	type OnCreate = ();
-	type FindAuthor = FindAuthorTruncated<Aura>;
+	type FindAuthor = FindAuthorTruncated<Babe>;
 	type GasLimitPovSizeRatio = GasLimitPovSizeRatio;
 	type SuicideQuickClearLimit = SuicideQuickClearLimit;
 	type Timestamp = Timestamp;
@@ -538,7 +520,6 @@ frame_support::construct_runtime!(
 	pub enum Runtime {
 		System: frame_system,
 		Timestamp: pallet_timestamp,
-		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
@@ -789,16 +770,6 @@ impl_runtime_apis! {
 			encoded: Vec<u8>,
 		) -> Option<Vec<(Vec<u8>, KeyTypeId)>> {
 			opaque::SessionKeys::decode_into_raw_public_keys(&encoded)
-		}
-	}
-
-	impl sp_consensus_aura::AuraApi<Block, AuraId> for Runtime {
-		fn slot_duration() -> sp_consensus_aura::SlotDuration {
-			sp_consensus_aura::SlotDuration::from_millis(Aura::slot_duration())
-		}
-
-		fn authorities() -> Vec<AuraId> {
-			Aura::authorities().to_vec()
 		}
 	}
 

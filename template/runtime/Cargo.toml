@@ -18,7 +18,6 @@ scale-info = { workspace = true }
 # Substrate
 sp-api = { workspace = true }
 sp-block-builder = { workspace = true }
-sp-consensus-aura = { workspace = true }
 sp-consensus-babe = { workspace = true }
 sp-consensus-grandpa = { workspace = true }
 sp-core = { workspace = true }
@@ -38,7 +37,6 @@ frame-system = { workspace = true }
 frame-system-benchmarking = { workspace = true, optional = true }
 frame-system-rpc-runtime-api = { workspace = true }
 pallet-authorship= { workspace = true }
-pallet-aura = { workspace = true }
 pallet-babe = { workspace = true }
 pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
 pallet-grandpa = { workspace = true }
@@ -78,7 +76,6 @@ std = [
 	# Substrate
 	"sp-api/std",
 	"sp-block-builder/std",
-	"sp-consensus-aura/std",
 	"sp-consensus-grandpa/std",
 	"sp-consensus-babe/std",
 	"sp-core/std",
@@ -99,7 +96,6 @@ std = [
 	"frame-system-rpc-runtime-api/std",
 	"frame-system-benchmarking?/std",
 	"pallet-authorship/std",
-	"pallet-aura/std",
 	"pallet-babe/std",
 	"pallet-balances/std",
 	"pallet-grandpa/std",
