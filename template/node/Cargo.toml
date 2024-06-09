@@ -26,7 +26,7 @@ serde_json = { workspace = true, features = ["arbitrary_precision"] }
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", workspace = true }
 sc-basic-authorship = { workspace = true }
 sc-chain-spec = { workspace = true }
-sc-cli = { workspace = true }
+sc-cli = { workspace = true, default-features = false }
 sc-client-api = { workspace = true }
 sc-consensus = { workspace = true }
 sc-consensus-aura = { workspace = true }
@@ -38,7 +38,7 @@ sc-network-sync = { workspace = true }
 sc-offchain = { workspace = true }
 sc-rpc = { workspace = true }
 sc-rpc-api = { workspace = true }
-sc-service = { workspace = true }
+sc-service = { workspace = true, default-features = false }
 sc-telemetry = { workspace = true }
 sc-transaction-pool = { workspace = true }
 sc-transaction-pool-api = { workspace = true }
@@ -67,14 +67,14 @@ pallet-transaction-payment = { workspace = true }
 
 # Frontier
 fc-api = { workspace = true }
-fc-cli = { workspace = true }
+fc-cli = { workspace = true, default-features = false }
 fc-consensus = { workspace = true }
-fc-db = { workspace = true }
-fc-mapping-sync = { workspace = true }
-fc-rpc = { workspace = true }
+fc-db = { workspace = true, default-features = false}
+fc-mapping-sync = { workspace = true, default-features = false}
+fc-rpc = { workspace = true, default-features = false}
 fc-rpc-core = { workspace = true }
 fc-storage = { workspace = true }
-fp-account = { workspace = true }
+fp-account = { workspace = true , default-features = false}
 fp-dynamic-fee = { workspace = true, features = ["default"] }
 fp-evm = { workspace = true, features = ["default"] }
 fp-rpc = { workspace = true, features = ["default"] }

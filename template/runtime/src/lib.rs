@@ -37,7 +37,7 @@ use frame_support::{
 	derive_impl,
 	genesis_builder_helper::{build_config, create_default_config},
 	parameter_types,
-	traits::{ ConstU32, ConstU8, FindAuthor, OnFinalize, KeyOwnerProofSystem},
+	traits::{ ConstU32, ConstU8, FindAuthor, OnFinalize, KeyOwnerProofSystem, OnTimestampSet},
 	weights::{constants::WEIGHT_REF_TIME_PER_MILLIS, IdentityFee, Weight},
 };
 use pallet_transaction_payment::{ConstFeeMultiplier, CurrencyAdapter};
@@ -253,10 +253,20 @@ parameter_types! {
 	pub storage EnableManualSeal: bool = false;
 }
 
+pub struct ConsensusOnTimestampSet<T>(PhantomData<T>);
+impl<T: pallet_babe::Config> OnTimestampSet<T::Moment> for ConsensusOnTimestampSet<T> {
+	fn on_timestamp_set(moment: T::Moment) {
+		if EnableManualSeal::get() {
+			return;
+		}
+		<pallet_babe::Pallet<T> as OnTimestampSet<T::Moment>>::on_timestamp_set(moment)
+	}
+}
+
 impl pallet_timestamp::Config for Runtime {
 	/// A timestamp: milliseconds since the unix epoch.
 	type Moment = u64;
-	type OnTimestampSet = Babe;
+	type OnTimestampSet = ConsensusOnTimestampSet<Self>;
 	type MinimumPeriod = MinimumPeriod;
 	type WeightInfo = ();
 }
@@ -314,6 +324,7 @@ impl<F: FindAuthor<u32>> FindAuthor<H160> for FindAuthorTruncated<F> {
 	{
 		if let Some(author_index) = F::find_author(digests) {
 			let authority_id = Babe::authorities()[author_index as usize].clone();
+			//TODO:- manual Test 
 			return Some(H160::from_slice(&authority_id.encode()[4..24]));
 		}
 		None
