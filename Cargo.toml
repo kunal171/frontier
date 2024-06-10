@@ -1,7 +1,7 @@
 [workspace]
 members = [
-	"template/node",
-	"template/runtime",
+	"node",
+	"runtime",
 ]
 resolver = "2"
 
@@ -120,7 +120,7 @@ pallet-evm-precompile-simple = { git = "https://github.com/polkadot-evm/frontier
 pallet-hotfix-sufficients = { git = "https://github.com/polkadot-evm/frontier", branch = "polkadot-v1.9.0", default-features = false}
 
 # Frontier Template
-frontier-template-runtime = { path = "template/runtime", default-features = false }
+frontier-template-runtime = { path = "runtime", default-features = false }
 
 [profile.release]
 # Substrate runtime requires unwinding.
