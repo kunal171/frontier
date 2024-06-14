@@ -199,14 +199,16 @@ where
 	RuntimeApi::RuntimeApi: RuntimeApiCollection,
 	Executor: NativeExecutionDispatch + 'static,
 {
-	let frontier_block_import =
-		FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
+
 
 	let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
 		sc_consensus_babe::configuration(&*client)?,
 		grandpa_block_import,
 		client.clone(),
 	)?;	
+
+	let frontier_block_import =
+		FrontierBlockImport::new(babe_block_import.clone(), client.clone());
 
 	let slot_duration = babe_link.config().slot_duration();
 
@@ -410,7 +412,7 @@ where
 			prometheus_registry.clone(),
 		));
 
-		let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+		let (grandpa_block_import, _grandpa_link) = sc_consensus_grandpa::block_import(
 			client.clone(),
 			GRANDPA_JUSTIFICATION_PERIOD,
 			&(client.clone() as Arc<_>),
@@ -418,7 +420,7 @@ where
 			telemetry.as_ref().map(|x| x.handle()),
 		)?;
 
-		let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
+		let (_babe_block_import, babe_link) = sc_consensus_babe::block_import(
 			sc_consensus_babe::configuration(&*client)?,
 			grandpa_block_import,
 			client.clone(),
@@ -540,7 +542,7 @@ where
 			telemetry.as_ref().map(|x| x.handle()),
 		);
 
-		let (grandpa_block_import, grandpa_link) = sc_consensus_grandpa::block_import(
+		let (grandpa_block_import, _grandpa_link) = sc_consensus_grandpa::block_import(
 			client.clone(),
 			GRANDPA_JUSTIFICATION_PERIOD,
 			&(client.clone() as Arc<_>),
@@ -548,7 +550,7 @@ where
 			telemetry.as_ref().map(|x| x.handle()),
 		)?;
 
-		let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
+		let (_babe_block_import, babe_link) = sc_consensus_babe::block_import(
 			sc_consensus_babe::configuration(&*client)?,
 			grandpa_block_import,
 			client.clone(),
