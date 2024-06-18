@@ -25,6 +25,9 @@ pub use fc_rpc_core::types::{FeeHistoryCache, FeeHistoryCacheLimit, FilterPool};
 pub use fc_storage::overrides_handle;
 use fp_rpc::{ConvertTransaction, ConvertTransactionRuntimeApi, EthereumRuntimeRPCApi};
 
+mod consensus_data_provider;
+// pub use consensus_data_provider;
+
 /// Extra dependencies for Ethereum compatibility.
 pub struct EthDeps<B: BlockT, C, P, A: ChainApi, CT, CIDP> {
 	/// The client instance to use.
@@ -94,7 +97,7 @@ where
 	EC: EthConfig<B, C>,
 {
 	use fc_rpc::{
-		pending::AuraConsensusDataProvider, Debug, DebugApiServer, Eth, EthApiServer, EthDevSigner,
+		Debug, DebugApiServer, Eth, EthApiServer, EthDevSigner,
 		EthFilter, EthFilterApiServer, EthPubSub, EthPubSubApiServer, EthSigner, Net, NetApiServer,
 		Web3, Web3ApiServer,
 	};
@@ -144,7 +147,7 @@ where
 			execute_gas_limit_multiplier,
 			forced_parent_hashes,
 			pending_create_inherent_data_providers,
-			Some(Box::new(AuraConsensusDataProvider::new(client.clone()))),
+			Some(Box::new(consensus_data_provider::BabeConsensusDataProvider::new(client.clone()))),
 		)
 		.replace_config::<EC>()
 		.into_rpc(),

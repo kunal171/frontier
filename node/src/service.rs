@@ -75,7 +75,7 @@ where
 		&Configuration,
 		&EthConfiguration,
 		&TaskManager,
-		FullSelectChain,
+		&FullSelectChain,
 		Option<TelemetryHandle>,
 		GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
 	) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>,
@@ -152,7 +152,7 @@ where
 		config,
 		eth_config,
 		&task_manager,
-		select_chain,
+		&select_chain,
 		telemetry.as_ref().map(|x| x.handle()),
 		grandpa_block_import,
 	)?;
@@ -189,7 +189,7 @@ pub fn build_babe_grandpa_import_queue<RuntimeApi, Executor>(
 	config: &Configuration,
 	eth_config: &EthConfiguration,
 	task_manager: &TaskManager,
-	select_chain: FullSelectChain,
+	select_chain: &FullSelectChain,
 	telemetry: Option<TelemetryHandle>,
 	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
 ) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>
@@ -203,7 +203,7 @@ where
 
 	let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
 		sc_consensus_babe::configuration(&*client)?,
-		grandpa_block_import,
+		grandpa_block_import.clone(),
 		client.clone(),
 	)?;	
 
@@ -232,11 +232,11 @@ where
 		client.clone(),
 	);
 
-	let (import_queue, babe_worker_handle) = sc_consensus_babe::import_queue(
+	let (import_queue, _babe_worker_handle) = sc_consensus_babe::import_queue(
 		sc_consensus_babe::ImportQueueParams {
 			link: babe_link.clone(),
 			block_import: frontier_block_import.clone(),
-			justification_import: Some(Box::new(grandpa_block_import)),
+			justification_import: Some(Box::new(grandpa_block_import.clone())),
 			client,
 			select_chain: select_chain.clone(),
 			create_inherent_data_providers,
@@ -257,7 +257,7 @@ pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
 	config: &Configuration,
 	_eth_config: &EthConfiguration,
 	task_manager: &TaskManager,
-	select_chain: FullSelectChain,
+	_select_chain: &FullSelectChain,
 	_telemetry: Option<TelemetryHandle>,
 	_grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
 ) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>

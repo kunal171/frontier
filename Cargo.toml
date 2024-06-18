@@ -29,13 +29,13 @@ sqlx = { version = "0.7.4", default-features = false, features = ["macros"] }
 thiserror = "1.0"
 tokio = "1.36.0"
 
+
 # Substrate Client
 sc-basic-authorship = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-chain-spec = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-cli = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-client-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-consensus = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
-sc-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-consensus-babe = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-consensus-grandpa = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
 sc-consensus-manual-seal = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
@@ -53,7 +53,6 @@ sc-transaction-pool-api = { git = "https://github.com/paritytech/polkadot-sdk", 
 sp-api = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }
 sp-block-builder = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }
 sp-blockchain = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0" }
-sp-consensus-aura = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }
 sp-consensus-babe = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }
 sp-consensus-grandpa = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }
 sp-core = { git = "https://github.com/paritytech/polkadot-sdk", branch = "release-polkadot-v1.9.0", default-features = false }

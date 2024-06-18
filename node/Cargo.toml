@@ -21,6 +21,7 @@ jsonrpsee = { workspace = true, features = ["server", "macros"] }
 log = { workspace = true }
 scale-codec = { package = "parity-scale-codec", workspace = true }
 serde_json = { workspace = true, features = ["arbitrary_precision"] }
+thiserror = {workspace = true}
 
 # Substrate
 prometheus-endpoint = { package = "substrate-prometheus-endpoint", workspace = true }
@@ -29,7 +30,6 @@ sc-chain-spec = { workspace = true }
 sc-cli = { workspace = true, default-features = false }
 sc-client-api = { workspace = true }
 sc-consensus = { workspace = true }
-sc-consensus-aura = { workspace = true }
 sc-consensus-babe= { workspace = true }
 sc-consensus-grandpa = { workspace = true }
 sc-consensus-manual-seal = { workspace = true }
@@ -46,7 +46,6 @@ sc-transaction-pool-api = { workspace = true }
 sp-api = { workspace = true, features = ["default"] }
 sp-block-builder = { workspace = true }
 sp-blockchain = { workspace = true }
-sp-consensus-aura = { workspace = true, features = ["default"] }
 sp-consensus-babe = { workspace = true, features = ["default"] }
 sp-consensus-grandpa = { workspace = true, features = ["default"] }
 sp-core = { workspace = true, features = ["default"] }

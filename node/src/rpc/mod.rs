@@ -17,14 +17,13 @@ use sc_service::TransactionPool;
 use sc_transaction_pool::ChainApi;
 use sp_api::{CallApiAt, ProvideRuntimeApi};
 use sp_blockchain::{Error as BlockChainError, HeaderBackend, HeaderMetadata};
-// use sp_consensus_aura::sr25519::AuthorityId as AuraId;
-// use sp_consensus_babe::AuthorityId as BabeId;
 use sp_inherents::CreateInherentDataProviders;
 use sp_runtime::traits::Block as BlockT;
 // Runtime
 use frontier_template_runtime::{opaque::Block, AccountId, Balance, Hash, Nonce};
 
 mod eth;
+
 pub use self::eth::{create_eth, overrides_handle, EthDeps};
 
 /// Full client dependencies.

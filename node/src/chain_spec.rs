@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, str::FromStr};
 use hex_literal::hex;
 // Substrate
 use sc_chain_spec::{ChainType, Properties};
-use sp_consensus_aura::sr25519::AuthorityId as AuraId;
+use sp_consensus_babe::AuthorityId as BabeId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
 #[allow(unused_imports)]
 use sp_core::ecdsa;
@@ -40,9 +40,9 @@ where
 	AccountPublic::from(get_from_seed::<TPublic>(seed)).into_account()
 }
 
-/// Generate an Aura authority key.
-pub fn authority_keys_from_seed(s: &str) -> (AuraId, GrandpaId) {
-	(get_from_seed::<AuraId>(s), get_from_seed::<GrandpaId>(s))
+/// Generate an Babe authority key.
+pub fn authority_keys_from_seed(s: &str) -> (BabeId, GrandpaId) {
+	(get_from_seed::<BabeId>(s), get_from_seed::<GrandpaId>(s))
 }
 
 fn properties() -> Properties {
@@ -56,7 +56,7 @@ const UNITS: Balance = 1_000_000_000_000_000_000;
 
 pub fn development_config(enable_manual_seal: bool) -> ChainSpec {
 	ChainSpec::builder(WASM_BINARY.expect("WASM not available"), Default::default())
-		.with_name("Development")
+		.with_name("Planck Testnet")
 		.with_id("dev")
 		.with_chain_type(ChainType::Development)
 		.with_properties(properties())
@@ -83,8 +83,8 @@ pub fn development_config(enable_manual_seal: bool) -> ChainSpec {
 
 pub fn local_testnet_config() -> ChainSpec {
 	ChainSpec::builder(WASM_BINARY.expect("WASM not available"), Default::default())
-		.with_name("Local Testnet")
-		.with_id("local_testnet")
+		.with_name("Planck Local Testnet")
+		.with_id("planck_local_testnet")
 		.with_chain_type(ChainType::Local)
 		.with_properties(properties())
 		.with_genesis_config_patch(testnet_genesis(
@@ -113,7 +113,7 @@ pub fn local_testnet_config() -> ChainSpec {
 fn testnet_genesis(
 	sudo_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	initial_authorities: Vec<(AuraId, GrandpaId)>,
+	initial_authorities: Vec<(BabeId, GrandpaId)>,
 	chain_id: u64,
 	enable_manual_seal: bool,
 ) -> serde_json::Value {
@@ -170,7 +170,7 @@ fn testnet_genesis(
 				.map(|k| (k, 1_000_000 * UNITS))
 				.collect::<Vec<_>>()
 		},
-		"aura": { "authorities": initial_authorities.iter().map(|x| (x.0.clone())).collect::<Vec<_>>() },
+		"babe": { "authorities": initial_authorities.iter().map(|x| (x.0.clone())).collect::<Vec<_>>() },
 		"grandpa": { "authorities": initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>() },
 		"evmChainId": { "chainId": chain_id },
 		"evm": { "accounts": evm_accounts },

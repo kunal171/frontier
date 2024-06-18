@@ -3075,7 +3075,6 @@ dependencies = [
  "sc-cli",
  "sc-client-api",
  "sc-consensus",
- "sc-consensus-aura",
  "sc-consensus-babe",
  "sc-consensus-grandpa",
  "sc-consensus-manual-seal",
@@ -3093,7 +3092,6 @@ dependencies = [
  "sp-api",
  "sp-block-builder",
  "sp-blockchain",
- "sp-consensus-aura",
  "sp-consensus-babe",
  "sp-consensus-grandpa",
  "sp-core",
@@ -3106,6 +3104,7 @@ dependencies = [
  "substrate-build-script-utils",
  "substrate-frame-rpc-system",
  "substrate-prometheus-endpoint",
+ "thiserror",
 ]
 
 [[package]]
