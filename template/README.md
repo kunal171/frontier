@@ -31,16 +31,16 @@ $ cargo build --release
 To execute the chain, run:
 
 ```
-$ ./target/release/frontier-template-node --dev
+$ ./target/release/planck-node --dev
 ```
 
 The node also supports to use manual seal (to produce block manually through RPC).  
 This is also used by the ts-tests:
 
 ```
-$ ./target/release/frontier-template-node --dev --sealing=manual
+$ ./target/release/planck-node --dev --sealing=manual
 # Or
-$ ./target/release/frontier-template-node --dev --sealing=instant
+$ ./target/release/planck-node --dev --sealing=instant
 ```
 
 ### Docker Based Development

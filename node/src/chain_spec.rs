@@ -10,7 +10,7 @@ use sp_core::ecdsa;
 use sp_core::{Pair, Public, H160, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
 // Frontier
-use frontier_template_runtime::{
+use planck_runtime::{
 	AccountId, Balance, RuntimeGenesisConfig, SS58Prefix, Signature, WASM_BINARY,
 };
 
@@ -170,7 +170,7 @@ fn testnet_genesis(
 				.map(|k| (k, 1_000_000 * UNITS))
 				.collect::<Vec<_>>()
 		},
-		"babe": { "authorities": initial_authorities.iter().map(|x| (x.0.clone())).collect::<Vec<_>>() },
+		"babe": { "authorities": initial_authorities.iter().map(|x| (x.0.clone(), 1)).collect::<Vec<_>>() },
 		"grandpa": { "authorities": initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>() },
 		"evmChainId": { "chainId": chain_id },
 		"evm": { "accounts": evm_accounts },

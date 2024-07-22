@@ -38,7 +38,7 @@
         remove them in the destination.
 
 4.  There are actually two packages in the Node Template, `frontier-node-template` (the node),
-    `frontier-template-runtime` (the runtime); Each has its' own `Cargo.toml`. Inside these three
+    `planck-runtime` (the runtime); Each has its' own `Cargo.toml`. Inside these three
     files, dependencies are listed in expanded form and linked to a certain git commit in Frontier
     remote repository, such as:
 

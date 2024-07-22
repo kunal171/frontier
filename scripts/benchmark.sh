@@ -7,7 +7,7 @@
 
 set -e
 
-BINARY="./target/release/frontier-template-node"
+BINARY="./target/release/planck-node"
 
 function choose_and_bench {
     readarray -t options < <(${BINARY} benchmark pallet --list | sed 1d)

@@ -16,7 +16,7 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ConstructRuntimeApi;
 use sp_core::U256;
 // Runtime
-use frontier_template_runtime::{opaque::Block, Hash, TransactionConverter};
+use planck_runtime::{opaque::Block, Hash, TransactionConverter};
 
 use crate::{
 	cli::Sealing,
@@ -27,7 +27,7 @@ use crate::{
 	},
 };
 pub use crate::{
-	client::{Client, TemplateRuntimeExecutor},
+	client::{Client, PlanckRuntimeExecutor},
 	eth::{db_config_dir, EthConfiguration},
 };
 
@@ -684,7 +684,7 @@ where
 			inherent_data: &mut sp_inherents::InherentData,
 		) -> Result<(), sp_inherents::Error> {
 			TIMESTAMP.with(|x| {
-				*x.borrow_mut() += frontier_template_runtime::SLOT_DURATION;
+				*x.borrow_mut() += planck_runtime::SLOT_DURATION;
 				inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
 			})
 		}
@@ -744,7 +744,7 @@ pub async fn build_full(
 	eth_config: EthConfiguration,
 	sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError> {
-	new_full::<frontier_template_runtime::RuntimeApi, TemplateRuntimeExecutor>(
+	new_full::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor>(
 		config, eth_config, sealing,
 	)
 	.await
@@ -771,7 +771,7 @@ pub fn new_chain_ops(
 		task_manager,
 		other,
 		..
-	} = new_partial::<frontier_template_runtime::RuntimeApi, TemplateRuntimeExecutor, _>(
+	} = new_partial::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor, _>(
 		config,
 		eth_config,
 		build_babe_grandpa_import_queue,
