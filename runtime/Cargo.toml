@@ -2,7 +2,7 @@
 name = "planck-runtime"
 version = "0.1.0"
 license = "Unlicense"
-description = "A fresh FRAME-based Substrate runtime, ready for hacking."
+description = "Planck Network Runtime"
 publish = false
 authors = { workspace = true }
 edition = { workspace = true }
