@@ -6,8 +6,8 @@ use futures::{channel::mpsc, prelude::*};
 // Substrate
 use prometheus_endpoint::Registry;
 use sc_client_api::{Backend, BlockBackend};
-use sc_consensus_babe::{self, SlotProportion};
 use sc_consensus::BasicQueue;
+use sc_consensus_babe::{self, BabeLink, BabeWorkerHandle, SlotProportion};
 use sc_executor::NativeExecutionDispatch;
 use sc_network_sync::strategy::warp::{WarpSyncParams, WarpSyncProvider};
 use sc_service::{error::Error as ServiceError, Configuration, PartialComponents, TaskManager};
@@ -25,6 +25,7 @@ use crate::{
 		new_frontier_partial, spawn_frontier_tasks, BackendType, EthCompatRuntimeApiCollection,
 		FrontierBackend, FrontierBlockImport, FrontierPartialComponents,
 	},
+	rpc,
 };
 pub use crate::{
 	client::{Client, PlanckRuntimeExecutor},
@@ -58,6 +59,7 @@ pub fn new_partial<RuntimeApi, Executor, BIQ>(
 		(
 			Option<Telemetry>,
 			BoxBlockImport,
+			(BabeLink<Block>, BabeWorkerHandle<Block>),
 			GrandpaLinkHalf<FullClient<RuntimeApi, Executor>>,
 			FrontierBackend,
 			Arc<fc_rpc::OverrideHandle<Block>>,
@@ -78,7 +80,14 @@ where
 		&FullSelectChain,
 		Option<TelemetryHandle>,
 		GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-	) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>,
+	) -> Result<
+		(
+			BasicImportQueue,
+			BoxBlockImport,
+			(BabeLink<Block>, BabeWorkerHandle<Block>),
+		),
+		ServiceError,
+	>,
 {
 	let telemetry = config
 		.telemetry_endpoints
@@ -147,7 +156,7 @@ where
 		}
 	};
 
-	let (import_queue, block_import) = build_import_queue(
+	let (import_queue, block_import, babe_deps) = build_import_queue(
 		client.clone(),
 		config,
 		eth_config,
@@ -176,106 +185,12 @@ where
 		other: (
 			telemetry,
 			block_import,
+			babe_deps,
 			grandpa_link,
 			frontier_backend,
 			overrides,
 		),
 	})
-}
-
-/// Build the import queue for the template runtime (babe + grandpa).
-pub fn build_babe_grandpa_import_queue<RuntimeApi, Executor>(
-	client: Arc<FullClient<RuntimeApi, Executor>>,
-	config: &Configuration,
-	eth_config: &EthConfiguration,
-	task_manager: &TaskManager,
-	select_chain: &FullSelectChain,
-	telemetry: Option<TelemetryHandle>,
-	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>
-where
-	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-	RuntimeApi: Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: RuntimeApiCollection,
-	Executor: NativeExecutionDispatch + 'static,
-{
-
-
-	let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
-		sc_consensus_babe::configuration(&*client)?,
-		grandpa_block_import.clone(),
-		client.clone(),
-	)?;	
-
-	let frontier_block_import =
-		FrontierBlockImport::new(babe_block_import.clone(), client.clone());
-
-	let slot_duration = babe_link.config().slot_duration();
-
-	let target_gas_price = eth_config.target_gas_price;
-	let create_inherent_data_providers = move |_, ()| async move {
-		let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
-		let slot =
-			sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-				*timestamp,
-				slot_duration,
-			);
-		let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-		Ok((slot, timestamp, dynamic_fee))
-	};
-
-	let transaction_pool = sc_transaction_pool::BasicPool::new_full(
-		config.transaction_pool.clone(),
-		config.role.is_authority().into(),
-		config.prometheus_registry(),
-		task_manager.spawn_essential_handle(),
-		client.clone(),
-	);
-
-	let (import_queue, _babe_worker_handle) = sc_consensus_babe::import_queue(
-		sc_consensus_babe::ImportQueueParams {
-			link: babe_link.clone(),
-			block_import: frontier_block_import.clone(),
-			justification_import: Some(Box::new(grandpa_block_import.clone())),
-			client,
-			select_chain: select_chain.clone(),
-			create_inherent_data_providers,
-			spawner: &task_manager.spawn_essential_handle(),
-			registry: config.prometheus_registry(),
-			telemetry,
-    		offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
-		},
-	)
-	.map_err::<ServiceError, _>(Into::into)?;
-
-	Ok((import_queue, Box::new(frontier_block_import)))
-}
-
-/// Build the import queue for the template runtime (manual seal).
-pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
-	client: Arc<FullClient<RuntimeApi, Executor>>,
-	config: &Configuration,
-	_eth_config: &EthConfiguration,
-	task_manager: &TaskManager,
-	_select_chain: &FullSelectChain,
-	_telemetry: Option<TelemetryHandle>,
-	_grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-) -> Result<(BasicImportQueue, BoxBlockImport), ServiceError>
-where
-	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-	RuntimeApi: Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: RuntimeApiCollection,
-	Executor: NativeExecutionDispatch + 'static,
-{
-	let frontier_block_import = FrontierBlockImport::new(client.clone(), client);
-	Ok((
-		sc_consensus_manual_seal::import_queue(
-			Box::new(frontier_block_import.clone()),
-			&task_manager.spawn_essential_handle(),
-			config.prometheus_registry(),
-		),
-		Box::new(frontier_block_import),
-	))
 }
 
 /// Builds a new service for a full client.
@@ -304,8 +219,10 @@ where
 		keystore_container,
 		select_chain,
 		transaction_pool,
-		other: (mut telemetry, block_import, grandpa_link, frontier_backend, overrides),
+		other: (mut telemetry, block_import, babe_deps, grandpa_link, frontier_backend, overrides),
 	} = new_partial(&config, &eth_config, build_import_queue)?;
+
+	let (babe_link, babe_worker_handle) = babe_deps;
 
 	let FrontierPartialComponents {
 		filter_pool,
@@ -389,6 +306,16 @@ where
 	// for ethereum-compatibility rpc.
 	config.rpc_id_provider = Some(Box::new(fc_rpc::EthereumSubIdProvider));
 
+	let justification_stream = grandpa_link.justification_stream();
+	let shared_authority_set = grandpa_link.shared_authority_set().clone();
+	let shared_voter_state = sc_consensus_grandpa::SharedVoterState::empty();
+	let shared_voter_state2 = shared_voter_state.clone();
+
+	let finality_proof_provider = sc_consensus_grandpa::FinalityProofProvider::new_for_service(
+		backend.clone(),
+		Some(shared_authority_set.clone()),
+	);
+
 	let rpc_builder = {
 		let client = client.clone();
 		let pool = transaction_pool.clone();
@@ -412,35 +339,14 @@ where
 			prometheus_registry.clone(),
 		));
 
-		let (grandpa_block_import, _grandpa_link) = sc_consensus_grandpa::block_import(
-			client.clone(),
-			GRANDPA_JUSTIFICATION_PERIOD,
-			&(client.clone() as Arc<_>),
-			select_chain.clone(),
-			telemetry.as_ref().map(|x| x.handle()),
-		)?;
-
-		let (_babe_block_import, babe_link) = sc_consensus_babe::block_import(
-			sc_consensus_babe::configuration(&*client)?,
-			grandpa_block_import,
-			client.clone(),
-		)?;
-
 		let slot_duration = babe_link.config().slot_duration();
 		let target_gas_price = eth_config.target_gas_price;
-		let pending_create_inherent_data_providers = move |_, ()| async move {
-			let current = sp_timestamp::InherentDataProvider::from_system_time();
-			let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
-			let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
-			let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
-				*timestamp,
-				slot_duration,
-			);
-			let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-			Ok((slot, timestamp, dynamic_fee))
-		};
-
-		Box::new(move |deny_unsafe, subscription_task_executor| {
+		let chain_spec = config.chain_spec.cloned_box();
+		let rpc_backend = backend.clone();
+		let keystore = keystore_container.keystore();
+		let rpc_select_chain = select_chain.clone();
+		
+		Box::new(move |deny_unsafe, subscription_task_executor: rpc::SubscriptionTaskExecutor| {
 			let eth_deps = crate::rpc::EthDeps {
 				client: client.clone(),
 				pool: pool.clone(),
@@ -462,10 +368,24 @@ where
 				fee_history_cache_limit,
 				execute_gas_limit_multiplier,
 				forced_parent_hashes: None,
-				pending_create_inherent_data_providers,
+				pending_create_inherent_data_providers: move |_, ()| async move {
+					let current = sp_timestamp::InherentDataProvider::from_system_time();
+					let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
+					let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
+					let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+						*timestamp,
+						slot_duration,
+					);
+					let dynamic_fee =
+						fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
+					Ok((slot, timestamp, dynamic_fee))
+				},
 			};
 			let deps = crate::rpc::FullDeps {
 				client: client.clone(),
+				backend: rpc_backend.clone(),
+				select_chain: rpc_select_chain.clone(),
+				chain_spec: chain_spec.cloned_box(),
 				pool: pool.clone(),
 				deny_unsafe,
 				command_sink: if sealing.is_some() {
@@ -474,6 +394,16 @@ where
 					None
 				},
 				eth: eth_deps,
+				babe: rpc::BabeDeps {
+					babe_worker_handle: babe_worker_handle.clone(),
+					keystore: keystore.clone(),
+				},
+				grandpa: rpc::GrandpaDeps {
+					shared_voter_state: shared_voter_state.clone(),
+					shared_authority_set: shared_authority_set.clone(),
+					justification_stream: justification_stream.clone(),
+					finality_provider: finality_proof_provider.clone(),
+				},
 			};
 			crate::rpc::create_full(
 				deps,
@@ -542,20 +472,6 @@ where
 			telemetry.as_ref().map(|x| x.handle()),
 		);
 
-		let (grandpa_block_import, _grandpa_link) = sc_consensus_grandpa::block_import(
-			client.clone(),
-			GRANDPA_JUSTIFICATION_PERIOD,
-			&(client.clone() as Arc<_>),
-			select_chain.clone(),
-			telemetry.as_ref().map(|x| x.handle()),
-		)?;
-
-		let (_babe_block_import, babe_link) = sc_consensus_babe::block_import(
-			sc_consensus_babe::configuration(&*client)?,
-			grandpa_block_import,
-			client.clone(),
-		)?;
-
 		let slot_duration = babe_link.config().slot_duration();
 		let target_gas_price = eth_config.target_gas_price;
 		let create_inherent_data_providers = move |_, ()| async move {
@@ -568,24 +484,22 @@ where
 			Ok((slot, timestamp, dynamic_fee))
 		};
 
-		let babe = sc_consensus_babe::start_babe(
-			sc_consensus_babe::BabeParams {
-				keystore: keystore_container.keystore(),
-				client,
-				select_chain,
-				env: proposer_factory,
-				block_import,
-				sync_oracle: sync_service.clone(),
-				justification_sync_link: sync_service.clone(),
-				create_inherent_data_providers,
-				force_authoring,
-				backoff_authoring_blocks: Option::<()>::None,
-				babe_link,
-				block_proposal_slot_portion: SlotProportion::new(0.5),
-				max_block_proposal_slot_portion: None,
-				telemetry: telemetry.as_ref().map(|x| x.handle()),
-			},
-		)?;
+		let babe = sc_consensus_babe::start_babe(sc_consensus_babe::BabeParams {
+			keystore: keystore_container.keystore(),
+			client,
+			select_chain,
+			env: proposer_factory,
+			block_import,
+			sync_oracle: sync_service.clone(),
+			justification_sync_link: sync_service.clone(),
+			create_inherent_data_providers,
+			force_authoring,
+			backoff_authoring_blocks: Option::<()>::None,
+			babe_link,
+			block_proposal_slot_portion: SlotProportion::new(0.5),
+			max_block_proposal_slot_portion: None,
+			telemetry: telemetry.as_ref().map(|x| x.handle()),
+		})?;
 		// the babe authoring task is considered essential, i.e. if it
 		// fails we take down the service with it.
 		task_manager
@@ -629,7 +543,7 @@ where
 				notification_service: grandpa_notification_service,
 				voting_rule: sc_consensus_grandpa::VotingRulesBuilder::default().build(),
 				prometheus_registry,
-				shared_voter_state: sc_consensus_grandpa::SharedVoterState::empty(),
+				shared_voter_state: shared_voter_state2,
 				telemetry: telemetry.as_ref().map(|x| x.handle()),
 				offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool),
 			})?;
@@ -643,6 +557,130 @@ where
 
 	network_starter.start_network();
 	Ok(task_manager)
+}
+
+/// Build the import queue for the planck runtime babe(frontier(grandpa(client))).
+pub fn build_babe_grandpa_import_queue<RuntimeApi, Executor>(
+	client: Arc<FullClient<RuntimeApi, Executor>>,
+	config: &Configuration,
+	eth_config: &EthConfiguration,
+	task_manager: &TaskManager,
+	select_chain: &FullSelectChain,
+	telemetry: Option<TelemetryHandle>,
+	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
+) -> Result<
+	(
+		BasicImportQueue,
+		BoxBlockImport,
+		(BabeLink<Block>, BabeWorkerHandle<Block>),
+	),
+	ServiceError,
+>
+where
+	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
+	RuntimeApi: Send + Sync + 'static,
+	RuntimeApi::RuntimeApi: RuntimeApiCollection,
+	Executor: NativeExecutionDispatch + 'static,
+{
+	let frontier_block_import =
+		FrontierBlockImport::new(grandpa_block_import.clone(), client.clone());
+
+	let (babe_block_import, babe_link) = sc_consensus_babe::block_import(
+		sc_consensus_babe::configuration(&*client)?,
+		frontier_block_import.clone(),
+		client.clone(),
+	)?;
+
+	let slot_duration = babe_link.config().slot_duration();
+
+	let target_gas_price = eth_config.target_gas_price;
+	let create_inherent_data_providers = move |_, ()| async move {
+		let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+		let slot =
+			sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+				*timestamp,
+				slot_duration,
+			);
+		let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
+		Ok((slot, timestamp, dynamic_fee))
+	};
+
+	let transaction_pool = sc_transaction_pool::BasicPool::new_full(
+		config.transaction_pool.clone(),
+		config.role.is_authority().into(),
+		config.prometheus_registry(),
+		task_manager.spawn_essential_handle(),
+		client.clone(),
+	);
+
+	let (import_queue, babe_worker_handle) =
+		sc_consensus_babe::import_queue(sc_consensus_babe::ImportQueueParams {
+			link: babe_link.clone(),
+			block_import: frontier_block_import.clone(),
+			justification_import: Some(Box::new(grandpa_block_import.clone())),
+			client,
+			select_chain: select_chain.clone(),
+			create_inherent_data_providers,
+			spawner: &task_manager.spawn_essential_handle(),
+			registry: config.prometheus_registry(),
+			telemetry,
+			offchain_tx_pool_factory: OffchainTransactionPoolFactory::new(transaction_pool.clone()),
+		})
+		.map_err::<ServiceError, _>(Into::into)?;
+
+	Ok((
+		import_queue,
+		Box::new(babe_block_import),
+		(babe_link, babe_worker_handle),
+	))
+}
+
+/// Build the import queue for the template runtime (manual seal).
+pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
+	client: Arc<FullClient<RuntimeApi, Executor>>,
+	config: &Configuration,
+	eth_config: &EthConfiguration,
+	task_manager: &TaskManager,
+	select_chain: &FullSelectChain,
+	telemetry: Option<TelemetryHandle>,
+	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
+) -> Result<
+	(
+		BasicImportQueue,
+		BoxBlockImport,
+		(BabeLink<Block>, BabeWorkerHandle<Block>),
+	),
+	ServiceError,
+>
+where
+	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
+	RuntimeApi: Send + Sync + 'static,
+	RuntimeApi::RuntimeApi: RuntimeApiCollection,
+	Executor: NativeExecutionDispatch + 'static,
+{
+	let frontier_block_import = FrontierBlockImport::new(client.clone(), client.clone());
+	// TODO: Unused code to avoid littering Option and expect everywhere
+	// Once manual_sealing is removed this will not be a problem
+	let (_, _, (babe_link, babe_worker_handle)) = build_babe_grandpa_import_queue(
+		client,
+		config,
+		eth_config,
+		task_manager,
+		select_chain,
+		telemetry,
+		grandpa_block_import,
+	)
+	.expect("Build Manual Seal Import Queue failed");
+
+	Ok((
+		sc_consensus_manual_seal::import_queue(
+			Box::new(frontier_block_import.clone()),
+			&task_manager.spawn_essential_handle(),
+			config.prometheus_registry(),
+		),
+		Box::new(frontier_block_import),
+		(babe_link, babe_worker_handle),
+	))
 }
 
 fn run_manual_seal_authorship<RuntimeApi, Executor>(
@@ -670,34 +708,6 @@ where
 		prometheus_registry,
 		telemetry.as_ref().map(|x| x.handle()),
 	);
-
-	thread_local!(static TIMESTAMP: RefCell<u64> = const { RefCell::new(0) });
-
-	/// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
-	/// Each call will increment timestamp by slot_duration making babe think time has passed.
-	struct MockTimestampInherentDataProvider;
-
-	#[async_trait::async_trait]
-	impl sp_inherents::InherentDataProvider for MockTimestampInherentDataProvider {
-		async fn provide_inherent_data(
-			&self,
-			inherent_data: &mut sp_inherents::InherentData,
-		) -> Result<(), sp_inherents::Error> {
-			TIMESTAMP.with(|x| {
-				*x.borrow_mut() += planck_runtime::SLOT_DURATION;
-				inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
-			})
-		}
-
-		async fn try_handle_error(
-			&self,
-			_identifier: &sp_inherents::InherentIdentifier,
-			_error: &[u8],
-		) -> Option<Result<(), sp_inherents::Error>> {
-			// The pallet never reports error.
-			None
-		}
-	}
 
 	let target_gas_price = eth_config.target_gas_price;
 	let create_inherent_data_providers = move |_, ()| async move {
@@ -744,10 +754,7 @@ pub async fn build_full(
 	eth_config: EthConfiguration,
 	sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError> {
-	new_full::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor>(
-		config, eth_config, sealing,
-	)
-	.await
+	new_full::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor>(config, eth_config, sealing).await
 }
 
 pub fn new_chain_ops(
@@ -776,5 +783,34 @@ pub fn new_chain_ops(
 		eth_config,
 		build_babe_grandpa_import_queue,
 	)?;
-	Ok((client, backend, import_queue, task_manager, other.3))
+	Ok((client, backend, import_queue, task_manager, other.4))
+}
+
+thread_local!(static TIMESTAMP: RefCell<u64> = const { RefCell::new(0) });
+
+/// Mock CIDP for testing
+/// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
+/// Each call will increment timestamp by slot_duration making babe think time has passed.
+struct MockTimestampInherentDataProvider;
+
+#[async_trait::async_trait]
+impl sp_inherents::InherentDataProvider for MockTimestampInherentDataProvider {
+	async fn provide_inherent_data(
+		&self,
+		inherent_data: &mut sp_inherents::InherentData,
+	) -> Result<(), sp_inherents::Error> {
+		TIMESTAMP.with(|x| {
+			*x.borrow_mut() += planck_runtime::SLOT_DURATION;
+			inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+		})
+	}
+
+	async fn try_handle_error(
+		&self,
+		_identifier: &sp_inherents::InherentIdentifier,
+		_error: &[u8],
+	) -> Option<Result<(), sp_inherents::Error>> {
+		// The pallet never reports error.
+		None
+	}
 }

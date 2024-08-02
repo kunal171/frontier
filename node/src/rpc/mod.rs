@@ -15,7 +15,7 @@ use sc_consensus_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
 };
 use sc_consensus_manual_seal::rpc::EngineCommand;
-use sc_rpc::SubscriptionTaskExecutor;
+pub(crate) use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::TransactionPool;
 use sc_transaction_pool::ChainApi;
@@ -49,17 +49,17 @@ pub struct GrandpaDeps<B> {
 	pub shared_authority_set: SharedAuthoritySet<Hash, BlockNumber>,
 	/// Receives notifications about justification events from Grandpa.
 	pub justification_stream: GrandpaJustificationStream<Block>,
-	/// Executor to drive the subscription manager in the Grandpa RPC handler.
-	pub subscription_executor: SubscriptionTaskExecutor,
 	/// Finality proof provider.
 	pub finality_provider: Arc<FinalityProofProvider<B, Block>>,
 }
 
 /// Full client dependencies.
+#[allow(unused)]
 pub struct FullDeps<C, P, B, A: ChainApi, CT, CIDP, SC> {
 	/// The client instance to use.
 	pub client: Arc<C>,
 	/// The backend used by the node.
+	/// Reserved for future rpc
 	pub backend: Arc<B>,
 	/// The SelectChain Strategy
 	pub select_chain: SC,
@@ -157,11 +157,11 @@ where
 		keystore,
 		babe_worker_handle,
 	} = babe;
+
 	let GrandpaDeps {
 		shared_voter_state,
 		shared_authority_set,
 		justification_stream,
-		subscription_executor,
 		finality_provider,
 	} = grandpa;
 
@@ -179,7 +179,7 @@ where
 	)?;
 	io.merge(
 		Grandpa::new(
-			subscription_executor,
+			subscription_task_executor.clone(),
 			shared_authority_set.clone(),
 			shared_voter_state,
 			justification_stream,
@@ -206,3 +206,5 @@ where
 
 	Ok(io)
 }
+
+
