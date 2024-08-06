@@ -2,9 +2,8 @@
 
 use std::{cell::RefCell, path::Path, sync::Arc, time::Duration};
 
-use futures::{channel::mpsc, prelude::*};
+use futures::prelude::*;
 // Substrate
-use prometheus_endpoint::Registry;
 use sc_client_api::{Backend, BlockBackend};
 use sc_consensus::BasicQueue;
 use sc_consensus_babe::{self, BabeLink, BabeWorkerHandle, SlotProportion};
@@ -16,10 +15,9 @@ use sc_transaction_pool_api::OffchainTransactionPoolFactory;
 use sp_api::ConstructRuntimeApi;
 use sp_core::U256;
 // Runtime
-use planck_runtime::{opaque::Block, Hash, TransactionConverter};
+use planck_runtime::{opaque::Block, TransactionConverter};
 
 use crate::{
-	cli::Sealing,
 	client::{BaseRuntimeApiCollection, FullBackend, FullClient, RuntimeApiCollection},
 	eth::{
 		new_frontier_partial, spawn_frontier_tasks, BackendType, EthCompatRuntimeApiCollection,
@@ -197,7 +195,6 @@ where
 pub async fn new_full<RuntimeApi, Executor>(
 	mut config: Configuration,
 	eth_config: EthConfiguration,
-	sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError>
 where
 	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
@@ -205,11 +202,7 @@ where
 	RuntimeApi::RuntimeApi: RuntimeApiCollection,
 	Executor: NativeExecutionDispatch + 'static,
 {
-	let build_import_queue = if sealing.is_some() {
-		build_manual_seal_import_queue::<RuntimeApi, Executor>
-	} else {
-		build_babe_grandpa_import_queue::<RuntimeApi, Executor>
-	};
+	let build_import_queue = build_babe_grandpa_import_queue::<RuntimeApi, Executor>;
 
 	let PartialComponents {
 		client,
@@ -238,9 +231,7 @@ where
 	let (grandpa_protocol_config, grandpa_notification_service) =
 		sc_consensus_grandpa::grandpa_peers_set_config(grandpa_protocol_name.clone());
 
-	let warp_sync_params = if sealing.is_some() {
-		None
-	} else {
+	let warp_sync_params = {
 		net_config.add_notification_protocol(grandpa_protocol_config);
 		let warp_sync: Arc<dyn WarpSyncProvider<Block>> =
 			Arc::new(sc_consensus_grandpa::warp_proof::NetworkProvider::new(
@@ -288,11 +279,8 @@ where
 	let role = config.role.clone();
 	let force_authoring = config.force_authoring;
 	let name = config.network.node_name.clone();
-	let enable_grandpa = !config.disable_grandpa && sealing.is_none();
+	let enable_grandpa = !config.disable_grandpa;
 	let prometheus_registry = config.prometheus_registry().cloned();
-
-	// Channel for the rpc handler to communicate with the authorship task.
-	let (command_sink, commands_stream) = mpsc::channel(1000);
 
 	// Sinks for pubsub notifications.
 	// Everytime a new subscription is created, a new mpsc channel is added to the sink pool.
@@ -345,73 +333,70 @@ where
 		let rpc_backend = backend.clone();
 		let keystore = keystore_container.keystore();
 		let rpc_select_chain = select_chain.clone();
-		
-		Box::new(move |deny_unsafe, subscription_task_executor: rpc::SubscriptionTaskExecutor| {
-			let eth_deps = crate::rpc::EthDeps {
-				client: client.clone(),
-				pool: pool.clone(),
-				graph: pool.pool().clone(),
-				converter: Some(TransactionConverter),
-				is_authority,
-				enable_dev_signer,
-				network: network.clone(),
-				sync: sync_service.clone(),
-				frontier_backend: match frontier_backend.clone() {
-					fc_db::Backend::KeyValue(b) => Arc::new(b),
-					fc_db::Backend::Sql(b) => Arc::new(b),
-				},
-				overrides: overrides.clone(),
-				block_data_cache: block_data_cache.clone(),
-				filter_pool: filter_pool.clone(),
-				max_past_logs,
-				fee_history_cache: fee_history_cache.clone(),
-				fee_history_cache_limit,
-				execute_gas_limit_multiplier,
-				forced_parent_hashes: None,
-				pending_create_inherent_data_providers: move |_, ()| async move {
-					let current = sp_timestamp::InherentDataProvider::from_system_time();
-					let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
-					let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
-					let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
+
+		Box::new(
+			move |deny_unsafe, subscription_task_executor: rpc::SubscriptionTaskExecutor| {
+				let eth_deps = crate::rpc::EthDeps {
+					client: client.clone(),
+					pool: pool.clone(),
+					graph: pool.pool().clone(),
+					converter: Some(TransactionConverter),
+					is_authority,
+					enable_dev_signer,
+					network: network.clone(),
+					sync: sync_service.clone(),
+					frontier_backend: match frontier_backend.clone() {
+						fc_db::Backend::KeyValue(b) => Arc::new(b),
+						fc_db::Backend::Sql(b) => Arc::new(b),
+					},
+					overrides: overrides.clone(),
+					block_data_cache: block_data_cache.clone(),
+					filter_pool: filter_pool.clone(),
+					max_past_logs,
+					fee_history_cache: fee_history_cache.clone(),
+					fee_history_cache_limit,
+					execute_gas_limit_multiplier,
+					forced_parent_hashes: None,
+					pending_create_inherent_data_providers: move |_, ()| async move {
+						let current = sp_timestamp::InherentDataProvider::from_system_time();
+						let next_slot = current.timestamp().as_millis() + slot_duration.as_millis();
+						let timestamp = sp_timestamp::InherentDataProvider::new(next_slot.into());
+						let slot = sp_consensus_babe::inherents::InherentDataProvider::from_timestamp_and_slot_duration(
 						*timestamp,
 						slot_duration,
 					);
-					let dynamic_fee =
-						fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-					Ok((slot, timestamp, dynamic_fee))
-				},
-			};
-			let deps = crate::rpc::FullDeps {
-				client: client.clone(),
-				backend: rpc_backend.clone(),
-				select_chain: rpc_select_chain.clone(),
-				chain_spec: chain_spec.cloned_box(),
-				pool: pool.clone(),
-				deny_unsafe,
-				command_sink: if sealing.is_some() {
-					Some(command_sink.clone())
-				} else {
-					None
-				},
-				eth: eth_deps,
-				babe: rpc::BabeDeps {
-					babe_worker_handle: babe_worker_handle.clone(),
-					keystore: keystore.clone(),
-				},
-				grandpa: rpc::GrandpaDeps {
-					shared_voter_state: shared_voter_state.clone(),
-					shared_authority_set: shared_authority_set.clone(),
-					justification_stream: justification_stream.clone(),
-					finality_provider: finality_proof_provider.clone(),
-				},
-			};
-			crate::rpc::create_full(
-				deps,
-				subscription_task_executor,
-				pubsub_notification_sinks.clone(),
-			)
-			.map_err(Into::into)
-		})
+						let dynamic_fee =
+							fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
+						Ok((slot, timestamp, dynamic_fee))
+					},
+				};
+				let deps = crate::rpc::FullDeps {
+					client: client.clone(),
+					backend: rpc_backend.clone(),
+					select_chain: rpc_select_chain.clone(),
+					chain_spec: chain_spec.cloned_box(),
+					pool: pool.clone(),
+					deny_unsafe,
+					eth: eth_deps,
+					babe: rpc::BabeDeps {
+						babe_worker_handle: babe_worker_handle.clone(),
+						keystore: keystore.clone(),
+					},
+					grandpa: rpc::GrandpaDeps {
+						shared_voter_state: shared_voter_state.clone(),
+						shared_authority_set: shared_authority_set.clone(),
+						justification_stream: justification_stream.clone(),
+						finality_provider: finality_proof_provider.clone(),
+					},
+				};
+				crate::rpc::create_full(
+					deps,
+					subscription_task_executor,
+					pubsub_notification_sinks.clone(),
+				)
+				.map_err(Into::into)
+			},
+		)
 	};
 
 	let _rpc_handlers = sc_service::spawn_tasks(sc_service::SpawnTasksParams {
@@ -444,26 +429,6 @@ where
 	.await;
 
 	if role.is_authority() {
-		// manual-seal authorship
-		if let Some(sealing) = sealing {
-			run_manual_seal_authorship(
-				&eth_config,
-				sealing,
-				client,
-				transaction_pool,
-				select_chain,
-				block_import,
-				&task_manager,
-				prometheus_registry.as_ref(),
-				telemetry.as_ref(),
-				commands_stream,
-			)?;
-
-			network_starter.start_network();
-			log::info!("Manual Seal Ready");
-			return Ok(task_manager);
-		}
-
 		let proposer_factory = sc_basic_authorship::ProposerFactory::new(
 			task_manager.spawn_handle(),
 			client.clone(),
@@ -635,126 +600,11 @@ where
 	))
 }
 
-/// Build the import queue for the template runtime (manual seal).
-pub fn build_manual_seal_import_queue<RuntimeApi, Executor>(
-	client: Arc<FullClient<RuntimeApi, Executor>>,
-	config: &Configuration,
-	eth_config: &EthConfiguration,
-	task_manager: &TaskManager,
-	select_chain: &FullSelectChain,
-	telemetry: Option<TelemetryHandle>,
-	grandpa_block_import: GrandpaBlockImport<FullClient<RuntimeApi, Executor>>,
-) -> Result<
-	(
-		BasicImportQueue,
-		BoxBlockImport,
-		(BabeLink<Block>, BabeWorkerHandle<Block>),
-	),
-	ServiceError,
->
-where
-	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-	RuntimeApi: Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: RuntimeApiCollection,
-	Executor: NativeExecutionDispatch + 'static,
-{
-	let frontier_block_import = FrontierBlockImport::new(client.clone(), client.clone());
-	// TODO: Unused code to avoid littering Option and expect everywhere
-	// Once manual_sealing is removed this will not be a problem
-	let (_, _, (babe_link, babe_worker_handle)) = build_babe_grandpa_import_queue(
-		client,
-		config,
-		eth_config,
-		task_manager,
-		select_chain,
-		telemetry,
-		grandpa_block_import,
-	)
-	.expect("Build Manual Seal Import Queue failed");
-
-	Ok((
-		sc_consensus_manual_seal::import_queue(
-			Box::new(frontier_block_import.clone()),
-			&task_manager.spawn_essential_handle(),
-			config.prometheus_registry(),
-		),
-		Box::new(frontier_block_import),
-		(babe_link, babe_worker_handle),
-	))
-}
-
-fn run_manual_seal_authorship<RuntimeApi, Executor>(
-	eth_config: &EthConfiguration,
-	sealing: Sealing,
-	client: Arc<FullClient<RuntimeApi, Executor>>,
-	transaction_pool: Arc<FullPool<FullClient<RuntimeApi, Executor>>>,
-	select_chain: FullSelectChain,
-	block_import: BoxBlockImport,
-	task_manager: &TaskManager,
-	prometheus_registry: Option<&Registry>,
-	telemetry: Option<&Telemetry>,
-	commands_stream: mpsc::Receiver<sc_consensus_manual_seal::rpc::EngineCommand<Hash>>,
-) -> Result<(), ServiceError>
-where
-	RuntimeApi: ConstructRuntimeApi<Block, FullClient<RuntimeApi, Executor>>,
-	RuntimeApi: Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: RuntimeApiCollection,
-	Executor: NativeExecutionDispatch + 'static,
-{
-	let proposer_factory = sc_basic_authorship::ProposerFactory::new(
-		task_manager.spawn_handle(),
-		client.clone(),
-		transaction_pool.clone(),
-		prometheus_registry,
-		telemetry.as_ref().map(|x| x.handle()),
-	);
-
-	let target_gas_price = eth_config.target_gas_price;
-	let create_inherent_data_providers = move |_, ()| async move {
-		let timestamp = MockTimestampInherentDataProvider;
-		let dynamic_fee = fp_dynamic_fee::InherentDataProvider(U256::from(target_gas_price));
-		Ok((timestamp, dynamic_fee))
-	};
-
-	let manual_seal = match sealing {
-		Sealing::Manual => future::Either::Left(sc_consensus_manual_seal::run_manual_seal(
-			sc_consensus_manual_seal::ManualSealParams {
-				block_import,
-				env: proposer_factory,
-				client,
-				pool: transaction_pool,
-				commands_stream,
-				select_chain,
-				consensus_data_provider: None,
-				create_inherent_data_providers,
-			},
-		)),
-		Sealing::Instant => future::Either::Right(sc_consensus_manual_seal::run_instant_seal(
-			sc_consensus_manual_seal::InstantSealParams {
-				block_import,
-				env: proposer_factory,
-				client,
-				pool: transaction_pool,
-				select_chain,
-				consensus_data_provider: None,
-				create_inherent_data_providers,
-			},
-		)),
-	};
-
-	// we spawn the future on a background thread managed by service.
-	task_manager
-		.spawn_essential_handle()
-		.spawn_blocking("manual-seal", None, manual_seal);
-	Ok(())
-}
-
 pub async fn build_full(
 	config: Configuration,
 	eth_config: EthConfiguration,
-	sealing: Option<Sealing>,
 ) -> Result<TaskManager, ServiceError> {
-	new_full::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor>(config, eth_config, sealing).await
+	new_full::<planck_runtime::RuntimeApi, PlanckRuntimeExecutor>(config, eth_config).await
 }
 
 pub fn new_chain_ops(
@@ -788,29 +638,29 @@ pub fn new_chain_ops(
 
 thread_local!(static TIMESTAMP: RefCell<u64> = const { RefCell::new(0) });
 
-/// Mock CIDP for testing
-/// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
-/// Each call will increment timestamp by slot_duration making babe think time has passed.
-struct MockTimestampInherentDataProvider;
+// /// Mock CIDP for testing
+// /// Provide a mock duration starting at 0 in millisecond for timestamp inherent.
+// /// Each call will increment timestamp by slot_duration making babe think time has passed.
+// struct MockTimestampInherentDataProvider;
 
-#[async_trait::async_trait]
-impl sp_inherents::InherentDataProvider for MockTimestampInherentDataProvider {
-	async fn provide_inherent_data(
-		&self,
-		inherent_data: &mut sp_inherents::InherentData,
-	) -> Result<(), sp_inherents::Error> {
-		TIMESTAMP.with(|x| {
-			*x.borrow_mut() += planck_runtime::SLOT_DURATION;
-			inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
-		})
-	}
+// #[async_trait::async_trait]
+// impl sp_inherents::InherentDataProvider for MockTimestampInherentDataProvider {
+// 	async fn provide_inherent_data(
+// 		&self,
+// 		inherent_data: &mut sp_inherents::InherentData,
+// 	) -> Result<(), sp_inherents::Error> {
+// 		TIMESTAMP.with(|x| {
+// 			*x.borrow_mut() += planck_runtime::SLOT_DURATION;
+// 			inherent_data.put_data(sp_timestamp::INHERENT_IDENTIFIER, &*x.borrow())
+// 		})
+// 	}
 
-	async fn try_handle_error(
-		&self,
-		_identifier: &sp_inherents::InherentIdentifier,
-		_error: &[u8],
-	) -> Option<Result<(), sp_inherents::Error>> {
-		// The pallet never reports error.
-		None
-	}
-}
+// 	async fn try_handle_error(
+// 		&self,
+// 		_identifier: &sp_inherents::InherentIdentifier,
+// 		_error: &[u8],
+// 	) -> Option<Result<(), sp_inherents::Error>> {
+// 		// The pallet never reports error.
+// 		None
+// 	}
+// }

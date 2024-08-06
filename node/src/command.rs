@@ -59,7 +59,7 @@ impl SubstrateCli for Cli {
 	fn load_spec(&self, id: &str) -> Result<Box<dyn ChainSpec>, String> {
 		Ok(match id {
 			"dev" => {
-				let enable_manual_seal = self.sealing.map(|_| true).unwrap_or_default();
+				let enable_manual_seal = false;
 				Box::new(chain_spec::development_config(enable_manual_seal))
 			}
 			"" | "local" => Box::new(chain_spec::local_testnet_config()),
@@ -245,7 +245,7 @@ pub fn run() -> sc_cli::Result<()> {
 		None => {
 			let runner = cli.create_runner(&cli.run)?;
 			runner.run_node_until_exit(|config| async move {
-				service::build_full(config, cli.eth, cli.sealing)
+				service::build_full(config, cli.eth)
 					.map_err(Into::into)
 					.await
 			})

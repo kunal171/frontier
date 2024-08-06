@@ -2,7 +2,6 @@
 
 use std::sync::Arc;
 
-use futures::channel::mpsc;
 use jsonrpsee::RpcModule;
 // Substrate
 use sc_client_api::{
@@ -14,7 +13,6 @@ use sc_consensus_babe::BabeWorkerHandle;
 use sc_consensus_grandpa::{
 	FinalityProofProvider, GrandpaJustificationStream, SharedAuthoritySet, SharedVoterState,
 };
-use sc_consensus_manual_seal::rpc::EngineCommand;
 pub(crate) use sc_rpc::SubscriptionTaskExecutor;
 use sc_rpc_api::DenyUnsafe;
 use sc_service::TransactionPool;
@@ -73,8 +71,6 @@ pub struct FullDeps<C, P, B, A: ChainApi, CT, CIDP, SC> {
 	pub babe: BabeDeps,
 	/// GRANDPA specific dependencies.
 	pub grandpa: GrandpaDeps<B>,
-	/// Manual seal command sink
-	pub command_sink: Option<mpsc::Sender<EngineCommand<Hash>>>,
 	/// Ethereum-compatibility specific dependencies.
 	pub eth: EthDeps<Block, C, P, A, CT, CIDP>,
 }
@@ -102,7 +98,6 @@ pub fn create_full<C, P, B, A, CT, CIDP, SC>(
 		grandpa,
 		backend: _,
 		eth,
-		command_sink,
 		chain_spec,
 	}: FullDeps<C, P, B, A, CT, CIDP, SC>,
 	subscription_task_executor: SubscriptionTaskExecutor,
@@ -138,7 +133,6 @@ where
 	use pallet_transaction_payment_rpc::{TransactionPayment, TransactionPaymentApiServer};
 	use sc_consensus_babe_rpc::{Babe, BabeApiServer};
 	use sc_consensus_grandpa_rpc::{Grandpa, GrandpaApiServer};
-	use sc_consensus_manual_seal::rpc::{ManualSeal, ManualSealApiServer};
 	use sc_rpc_spec_v2::chain_spec::{ChainSpec, ChainSpecApiServer};
 	use substrate_frame_rpc_system::{System, SystemApiServer};
 
@@ -187,14 +181,6 @@ where
 		)
 		.into_rpc(),
 	)?;
-
-	if let Some(command_sink) = command_sink {
-		io.merge(
-			// We provide the rpc handler with the sending end of the channel to allow the rpc
-			// send EngineCommands to the background block authorship task.
-			ManualSeal::new(command_sink).into_rpc(),
-		)?;
-	}
 
 	// Ethereum compatibility RPCs
 	let io = create_eth::<_, _, _, _, _, _, _, DefaultEthConfig<C, B>>(

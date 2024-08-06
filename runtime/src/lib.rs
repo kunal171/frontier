@@ -494,38 +494,6 @@ impl validator_manager::Config for Runtime {
 	type PrivilegedOrigin = EnsureRoot<AccountId>;
 }
 
-
-
-
-#[frame_support::pallet]
-pub mod pallet_manual_seal {
-	use super::*;
-	use frame_support::pallet_prelude::*;
-
-	#[pallet::pallet]
-	pub struct Pallet<T>(PhantomData<T>);
-
-	#[pallet::config]
-	pub trait Config: frame_system::Config {}
-
-	#[pallet::genesis_config]
-	#[derive(frame_support::DefaultNoBound)]
-	pub struct GenesisConfig<T> {
-		pub enable: bool,
-		#[serde(skip)]
-		pub _config: PhantomData<T>,
-	}
-
-	#[pallet::genesis_build]
-	impl<T: Config> BuildGenesisConfig for GenesisConfig<T> {
-		fn build(&self) {
-			EnableManualSeal::set(&self.enable);
-		}
-	}
-}
-
-impl pallet_manual_seal::Config for Runtime {}
-
 // Create the runtime by composing the FRAME pallets that were previously configured.
 frame_support::construct_runtime!(
 	pub enum Runtime {
@@ -542,7 +510,6 @@ frame_support::construct_runtime!(
 		BaseFee: pallet_base_fee,
 		HotfixSufficients: pallet_hotfix_sufficients,
 		Babe: pallet_babe,
-		ManualSeal: pallet_manual_seal,
 		Offences: pallet_offences,
 		Historical: session_historical,
 		Session: pallet_session,
