@@ -54,7 +54,7 @@ fn properties() -> Properties {
 
 const UNITS: Balance = 1_000_000_000_000_000_000;
 
-pub fn development_config(enable_manual_seal: bool) -> ChainSpec {
+pub fn development_config() -> ChainSpec {
 	ChainSpec::builder(WASM_BINARY.expect("WASM not available"), Default::default())
 		.with_name("Planck Testnet")
 		.with_id("dev")
@@ -76,7 +76,6 @@ pub fn development_config(enable_manual_seal: bool) -> ChainSpec {
 			vec![authority_keys_from_seed("Alice")],
 			// Ethereum chain ID
 			SS58Prefix::get() as u64,
-			enable_manual_seal,
 		))
 		.build()
 }
@@ -104,7 +103,6 @@ pub fn local_testnet_config() -> ChainSpec {
 				authority_keys_from_seed("Bob"),
 			],
 			42,
-			false,
 		))
 		.build()
 }
@@ -115,7 +113,6 @@ fn testnet_genesis(
 	endowed_accounts: Vec<AccountId>,
 	initial_authorities: Vec<(BabeId, GrandpaId)>,
 	chain_id: u64,
-	enable_manual_seal: bool,
 ) -> serde_json::Value {
 	let evm_accounts = {
 		let mut map = BTreeMap::new();
@@ -174,6 +171,5 @@ fn testnet_genesis(
 		"grandpa": { "authorities": initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>() },
 		"evmChainId": { "chainId": chain_id },
 		"evm": { "accounts": evm_accounts },
-		"manualSeal": { "enable": enable_manual_seal }
 	})
 }
