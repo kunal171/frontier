@@ -581,7 +581,7 @@ where
 	let (import_queue, babe_worker_handle) =
 		sc_consensus_babe::import_queue(sc_consensus_babe::ImportQueueParams {
 			link: babe_link.clone(),
-			block_import: frontier_block_import.clone(),
+			block_import: babe_block_import.clone(),
 			justification_import: Some(Box::new(grandpa_block_import.clone())),
 			client,
 			select_chain: select_chain.clone(),
