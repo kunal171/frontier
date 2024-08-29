@@ -2,13 +2,14 @@ use hex_literal::hex;
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeMap, str::FromStr};
 // Substrate
+use planck_runtime::{
+	opaque::SessionKeys, AccountId, Balance, Block, SS58Prefix, Signature, WASM_BINARY,
+};
 use sc_chain_spec::{ChainSpecExtension, ChainType, Properties};
 use sp_consensus_babe::AuthorityId as BabeId;
 use sp_consensus_grandpa::AuthorityId as GrandpaId;
 use sp_core::{Pair, Public, H160, U256};
 use sp_runtime::traits::{IdentifyAccount, Verify};
-// Frontier
-use planck_runtime::{AccountId, Balance, Block, SS58Prefix, Signature, WASM_BINARY};
 
 // The URL for the telemetry server.
 // const STAGING_TELEMETRY_URL: &str = "wss://telemetry.polkadot.io/submit/";
@@ -52,8 +53,16 @@ where
 }
 
 /// Generate an Babe authority key.
-pub fn authority_keys_from_seed(s: &str) -> (BabeId, GrandpaId) {
-	(get_from_seed::<BabeId>(s), get_from_seed::<GrandpaId>(s))
+pub fn authority_keys_from_seed(seed: &str) -> (AccountId, BabeId, GrandpaId) {
+	(
+		get_account_id_from_seed::<sp_core::ecdsa::Public>(seed),
+		get_from_seed::<BabeId>(seed),
+		get_from_seed::<GrandpaId>(seed),
+	)
+}
+
+fn session_keys(babe: BabeId, grandpa: GrandpaId) -> SessionKeys {
+	SessionKeys { babe, grandpa }
 }
 
 fn properties() -> Properties {
@@ -122,7 +131,7 @@ pub fn local_testnet_config() -> ChainSpec {
 fn testnet_genesis(
 	sudo_key: AccountId,
 	endowed_accounts: Vec<AccountId>,
-	initial_authorities: Vec<(BabeId, GrandpaId)>,
+	initial_authorities: Vec<(AccountId, BabeId, GrandpaId)>,
 	chain_id: u64,
 ) -> serde_json::Value {
 	let evm_accounts = {
@@ -178,8 +187,24 @@ fn testnet_genesis(
 				.map(|k| (k, 1_000_000 * UNITS))
 				.collect::<Vec<_>>()
 		},
-		"babe": { "authorities": initial_authorities.iter().map(|x| (x.0.clone(), 1)).collect::<Vec<_>>() },
-		"grandpa": { "authorities": initial_authorities.iter().map(|x| (x.1.clone(), 1)).collect::<Vec<_>>() },
+		"babe": {
+			"epochConfig": Some(planck_runtime::BABE_GENESIS_EPOCH_CONFIG),
+		},
+		"session": {
+			"keys": initial_authorities
+				.iter()
+				.map(|x| {
+					(
+						x.0.clone(),
+						x.0.clone(),
+						session_keys(
+							x.1.clone(),
+							x.2.clone(),
+						),
+					)
+				})
+				.collect::<Vec<_>>(),
+		},
 		"evmChainId": { "chainId": chain_id },
 		"evm": { "accounts": evm_accounts },
 	})

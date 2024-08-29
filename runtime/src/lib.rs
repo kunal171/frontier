@@ -261,10 +261,10 @@ parameter_types! {
 impl pallet_grandpa::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
 	type WeightInfo = ();
-	type MaxAuthorities = ConstU32<32>;
+	type MaxAuthorities = MaxAuthorities;
 	type MaxNominators = ConstU32<0>;
 	type MaxSetIdSessionEntries = ();
-	type KeyOwnerProof = sp_core::Void;
+	type KeyOwnerProof = <Historical as KeyOwnerProofSystem<(KeyTypeId, GrandpaId)>>::Proof;
 	type EquivocationReportSystem = ();
 }
 
@@ -423,7 +423,8 @@ impl pallet_hotfix_sufficients::Config for Runtime {
 	type WeightInfo = pallet_hotfix_sufficients::weights::SubstrateWeight<Self>;
 }
 
-pub const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10 * MINUTES;
+// pub const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 10 * MINUTES;
+pub const EPOCH_DURATION_IN_BLOCKS: BlockNumber = 1 * MINUTES;
 pub const EPOCH_DURATION_IN_SLOTS: u64 = {
 	const SLOT_FILL_RATE: f64 = 3000 as f64 / 3000 as f64;
 
@@ -449,7 +450,8 @@ impl pallet_babe::Config for Runtime {
 	type WeightInfo = ();
 	type MaxAuthorities = MaxAuthorities;
 	type MaxNominators = MaxNominators;
-	type KeyOwnerProof = sp_session::MembershipProof;
+	type KeyOwnerProof =
+		<Historical as KeyOwnerProofSystem<(KeyTypeId, pallet_babe::AuthorityId)>>::Proof;
 	type EquivocationReportSystem =
 		pallet_babe::EquivocationReportSystem<Self, Offences, Historical, ReportLongevity>;
 }
@@ -465,17 +467,11 @@ impl pallet_authorship::Config for Runtime {
 	type EventHandler = ();
 }
 
-pub struct ValidatorIdOf;
-impl sp_runtime::traits::Convert<AccountId, Option<AccountId>> for ValidatorIdOf {
-	fn convert(a: AccountId) -> Option<AccountId> {
-		Some(a)
-	}
-}
 
 impl pallet_session::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type ValidatorId = AccountId;
-	type ValidatorIdOf = ValidatorIdOf;
+	type ValidatorId = <Self as frame_system::Config>::AccountId;
+	type ValidatorIdOf = ();
 	type ShouldEndSession = Babe;
 	type NextSessionRotation = Babe;
 	type SessionManager = pallet_session::historical::NoteHistoricalRoot<Self, ValidatorManager>;
@@ -530,46 +526,47 @@ mod runtime {
 	pub type Grandpa = pallet_grandpa;
 
 	#[runtime::pallet_index(4)]
-	pub type Balances = pallet_balances;
-
+	pub type Authorship = pallet_authorship;
+	
 	#[runtime::pallet_index(5)]
 	pub type TransactionPayment = pallet_transaction_payment;
-
+	
 	#[runtime::pallet_index(6)]
 	pub type Sudo = pallet_sudo;
 
+	#[runtime::pallet_index(7)]
+	pub type Balances = pallet_balances;
+
+	#[runtime::pallet_index(11)]
+	pub type Session = pallet_session;
+	
 	#[runtime::pallet_index(12)]
-	pub type Ethereum = pallet_ethereum;
-
+	pub type Historical = session_historical;
+	
 	#[runtime::pallet_index(13)]
-	pub type EVM = pallet_evm;
-
-	#[runtime::pallet_index(14)]
-	pub type EVMChainId = pallet_evm_chain_id;
-
-	#[runtime::pallet_index(15)]
-	pub type DynamicFee = pallet_dynamic_fee;
-
-	#[runtime::pallet_index(16)]
-	pub type BaseFee = pallet_base_fee;
-
-	#[runtime::pallet_index(17)]
-	pub type HotfixSufficients = pallet_hotfix_sufficients;
-
-	#[runtime::pallet_index(21)]
 	pub type Offences = pallet_offences;
 
-	#[runtime::pallet_index(22)]
-	pub type Historical = session_historical;
-
-	#[runtime::pallet_index(23)]
-	pub type Session = pallet_session;
-
-	#[runtime::pallet_index(24)]
+	#[runtime::pallet_index(14)]
 	pub type ValidatorManager = validator_manager;
 
+	#[runtime::pallet_index(22)]
+	pub type Ethereum = pallet_ethereum;
+
+	#[runtime::pallet_index(23)]
+	pub type EVM = pallet_evm;
+
+	#[runtime::pallet_index(24)]
+	pub type EVMChainId = pallet_evm_chain_id;
+
 	#[runtime::pallet_index(25)]
-	pub type Authorship = pallet_authorship;
+	pub type DynamicFee = pallet_dynamic_fee;
+
+	#[runtime::pallet_index(26)]
+	pub type BaseFee = pallet_base_fee;
+
+	#[runtime::pallet_index(27)]
+	pub type HotfixSufficients = pallet_hotfix_sufficients;
+
 }
 
 #[derive(Clone)]
