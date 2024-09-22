@@ -39,13 +39,18 @@ frame-system-rpc-runtime-api = { workspace = true }
 pallet-authorship= { workspace = true }
 pallet-babe = { workspace = true }
 pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
+pallet-collective = { workspace = true }
+pallet-democracy = { workspace = true }
 pallet-grandpa = { workspace = true }
 pallet-offences = { workspace = true }
+pallet-preimage = { workspace = true }
+pallet-scheduler = { workspace = true }
 pallet-session = { workspace = true }
 pallet-sudo = { workspace = true }
 pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc-runtime-api = { workspace = true }
+pallet-treasury = { workspace = true }
 
 # Frontier
 fp-account = { workspace = true, features = ["serde"] }
@@ -98,13 +103,18 @@ std = [
 	"pallet-authorship/std",
 	"pallet-babe/std",
 	"pallet-balances/std",
+	"pallet-collective/std",
+	"pallet-democracy/std",
 	"pallet-grandpa/std",
 	"pallet-offences/std",
+	"pallet-preimage/std",
+	"pallet-scheduler/std",
 	"pallet-session/std",
 	"pallet-sudo/std",
 	"pallet-timestamp/std",
 	"pallet-transaction-payment/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
+	"pallet-treasury/std",
 	# Frontier
 	"fp-account/std",
 	"fp-evm/std",
