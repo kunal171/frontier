@@ -42,6 +42,7 @@ pallet-balances = { workspace = true, features = ["insecure_zero_ed"] }
 pallet-collective = { workspace = true }
 pallet-democracy = { workspace = true }
 pallet-grandpa = { workspace = true }
+pallet-multisig = { workspace = true }
 pallet-offences = { workspace = true }
 pallet-preimage = { workspace = true }
 pallet-scheduler = { workspace = true }
@@ -51,6 +52,7 @@ pallet-timestamp = { workspace = true }
 pallet-transaction-payment = { workspace = true }
 pallet-transaction-payment-rpc-runtime-api = { workspace = true }
 pallet-treasury = { workspace = true }
+pallet-tx-pause = { workspace = true }
 
 # Frontier
 fp-account = { workspace = true, features = ["serde"] }
@@ -106,6 +108,7 @@ std = [
 	"pallet-collective/std",
 	"pallet-democracy/std",
 	"pallet-grandpa/std",
+	"pallet-multisig/std",
 	"pallet-offences/std",
 	"pallet-preimage/std",
 	"pallet-scheduler/std",
@@ -115,6 +118,7 @@ std = [
 	"pallet-transaction-payment/std",
 	"pallet-transaction-payment-rpc-runtime-api/std",
 	"pallet-treasury/std",
+	"pallet-tx-pause/std",
 	# Frontier
 	"fp-account/std",
 	"fp-evm/std",

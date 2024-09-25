@@ -39,7 +39,7 @@ use frame_support::{
 	traits::{ConstU32, ConstBool, ConstU8, FindAuthor, KeyOwnerProofSystem,
 		 OnFinalize, fungible::HoldConsideration, LinearStoragePrice, 
 		 PrivilegeCmp, EitherOfDiverse, EnsureOneOf, EitherOf, EnsureOrigin,
-		 tokens::{PayFromAccount, UnityAssetBalanceConversion},
+		 tokens::{PayFromAccount, UnityAssetBalanceConversion},Contains
 		},
 	weights::{constants::WEIGHT_REF_TIME_PER_MILLIS, IdentityFee, Weight},
 	instances::{Instance1, Instance2},
@@ -48,6 +48,7 @@ use frame_support::{
 use frame_system::{EnsureRoot, EnsureSigned, EnsureWithSuccess, EnsureRootWithSuccess};
 use pallet_transaction_payment::{ConstFeeMultiplier, FungibleAdapter};
 use sp_genesis_builder::PresetId;
+use pallet_tx_pause::RuntimeCallNameOf;
 // Frontier
 use fp_account::EthereumSignature;
 use fp_evm::weight_per_gas;
@@ -689,6 +690,42 @@ impl pallet_treasury::Config for Runtime {
 }
 
 
+pub struct TxPauseWhitelistedCalls;
+/// Whitelist `Balances::transfer_keep_alive`, all others are pauseable.
+impl Contains<RuntimeCallNameOf<Runtime>> for TxPauseWhitelistedCalls {
+	fn contains(full_name: &RuntimeCallNameOf<Runtime>) -> bool {
+		match (full_name.0.as_slice(), full_name.1.as_slice()) {
+			(b"Balances", b"transfer_keep_alive") => true,
+			_ => false,
+		}
+	}
+}
+
+impl pallet_tx_pause::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type PauseOrigin = EnsureRoot<AccountId>;
+	type UnpauseOrigin = EnsureRoot<AccountId>;
+	type WhitelistedCalls = TxPauseWhitelistedCalls;
+	type MaxNameLen = ConstU32<256>;
+	type WeightInfo = pallet_tx_pause::weights::SubstrateWeight<Runtime>;
+}
+
+parameter_types! {
+	pub const DepositBase: Balance = 100;
+	pub const DepositFactor: Balance = 32;
+}
+
+impl pallet_multisig::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type RuntimeCall = RuntimeCall;
+	type Currency = Balances;
+	type DepositBase = DepositBase;
+	type DepositFactor = DepositFactor;
+	type MaxSignatories = ConstU32<100>;
+	type WeightInfo = pallet_multisig::weights::SubstrateWeight<Runtime>;
+}
+
 #[frame_support::runtime]
 mod runtime {
 	#[runtime::runtime]
@@ -774,6 +811,11 @@ mod runtime {
 	#[runtime::pallet_index(25)]
 	pub type Treasury = pallet_treasury::Pallet<Runtime>;
 
+	#[runtime::pallet_index(26)]
+	pub type TxPause = pallet_tx_pause::Pallet<Runtime>;
+
+	#[runtime::pallet_index(27)]
+	pub type Multisig = pallet_multisig::Pallet<Runtime>;
 }
 
 #[derive(Clone)]

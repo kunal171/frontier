@@ -5707,6 +5707,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-multisig"
+version = "37.0.0"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#51a1705d9ce56a5513241b9a3a770fb788812da9"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "log",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
 name = "pallet-offences"
 version = "36.0.0"
 source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#51a1705d9ce56a5513241b9a3a770fb788812da9"
@@ -5734,6 +5749,20 @@ dependencies = [
  "parity-scale-codec",
  "scale-info",
  "sp-core",
+ "sp-io",
+ "sp-runtime",
+]
+
+[[package]]
+name = "pallet-proxy"
+version = "37.0.0"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#51a1705d9ce56a5513241b9a3a770fb788812da9"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
  "sp-io",
  "sp-runtime",
 ]
@@ -5868,6 +5897,38 @@ dependencies = [
  "scale-info",
  "serde",
  "sp-core",
+ "sp-runtime",
+]
+
+[[package]]
+name = "pallet-tx-pause"
+version = "18.0.0"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#51a1705d9ce56a5513241b9a3a770fb788812da9"
+dependencies = [
+ "docify",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "pallet-proxy",
+ "pallet-utility",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-runtime",
+]
+
+[[package]]
+name = "pallet-utility"
+version = "37.0.0"
+source = "git+https://github.com/paritytech/polkadot-sdk?branch=stable2407#51a1705d9ce56a5513241b9a3a770fb788812da9"
+dependencies = [
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
  "sp-runtime",
 ]
 
@@ -6253,6 +6314,7 @@ dependencies = [
  "pallet-evm-precompile-simple",
  "pallet-grandpa",
  "pallet-hotfix-sufficients",
+ "pallet-multisig",
  "pallet-offences",
  "pallet-preimage",
  "pallet-scheduler",
@@ -6262,6 +6324,7 @@ dependencies = [
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
  "pallet-treasury",
+ "pallet-tx-pause",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
